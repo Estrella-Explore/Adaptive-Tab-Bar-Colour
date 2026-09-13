@@ -19,9 +19,6 @@
  * An object that defines the colour of the Firefox UI.
  */
 
-/** Version of Firefox. */
-let firefoxVersion = 115;
-
 /** Preference instance. */
 const pref = new Preference();
 
@@ -29,11 +26,7 @@ const pref = new Preference();
 const blankTabIds = new Set<number>();
 
 /** Page colour of Firefox internal page. */
-const browserColour = createBrowserColour(
-	() => cache.scheme,
-	() => firefoxVersion,
-	pref,
-);
+const browserColour = createBrowserColour(() => cache.scheme, pref);
 
 /** Runtime cache. */
 const cache: {
@@ -431,38 +424,13 @@ async function setTabThemeColour(
  *
  * @see https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/theme
  */
-async function applyTheme(
-	windowId: number,
-	colour: Colour,
-	scheme: Scheme,
-): Promise<void> {
+function applyTheme(windowId: number, colour: Colour, scheme: Scheme): void {
 	if (scheme !== "light" && scheme !== "dark") return;
 
 	const lightDark = <T>(light: T, dark: T) =>
 		scheme === "light" ? light : dark;
 	const css = (value: number): string =>
 		colour.brightness(lightDark(-1.5, 1) * value).toRGBA();
-	const dataURL = async (colour: string): Promise<string> => {
-		const canvas = new OffscreenCanvas(16, 16);
-		const context = canvas.getContext("2d")!;
-		context.fillStyle = colour;
-		context.fillRect(0, 0, 16, 16);
-		const blob = await canvas.convertToBlob();
-		return new Promise((resolve) => {
-			const reader = new FileReader();
-			reader.onloadend = () => resolve(reader.result as string);
-			reader.readAsDataURL(blob);
-		});
-	};
-	const nova = <T>(mapping: Record<number, () => T>): T | undefined => {
-		if (!pref.nova) return mapping[0]?.();
-		let match = 0;
-		for (const key in mapping) {
-			const version = Number(key);
-			if (firefoxVersion >= version && version > match) match = version;
-		}
-		return mapping[match]?.();
-	};
 
 	const primaryColour = lightDark("#000000", "#ffffff");
 	const secondaryColour = lightDark("#0000001c", "#ffffff1c");
@@ -471,13 +439,6 @@ async function applyTheme(
 		: "AccentColor";
 
 	const theme: Theme = {
-		images: {
-			additional_backgrounds: await nova({
-				0: () => undefined,
-				152: async () => [await dataURL(css(pref.tabbar))],
-				153: () => undefined,
-			}),
-		},
 		colors: {
 			// adaptive
 			button_background_active: css(pref.tabSelected),
@@ -490,45 +451,30 @@ async function applyTheme(
 			sidebar_border: css(pref.sidebar + pref.sidebarBorder),
 			tab_line: css(pref.tabSelectedBorder + pref.tabSelected),
 			tab_selected: css(pref.tabSelected),
-			toolbar: nova({
-				0: () => css(pref.toolbar),
-				153: () =>
-					pref.toolbar === 0
-						? "transparent"
-						: css(pref.toolbar + pref.tabbar + 5),
-			}),
-			toolbar_bottom_separator: nova({
-				0: () => css(pref.toolbarBorder + pref.toolbar),
-				152: () => css(pref.tabbarBorder + pref.tabbar),
-			}),
-			toolbar_field: nova({
-				0: () => css(pref.toolbarField),
-				153: () => css(pref.toolbarField + 5),
-			}),
-			toolbar_field_border: nova({
-				0: () => css(pref.toolbarFieldBorder + pref.toolbarField),
-				153: () => css(pref.toolbarFieldBorder + pref.toolbarField + 5),
-			}),
-			toolbar_field_focus: nova({
-				0: () => css(pref.toolbarFieldOnFocus),
-				153: () => css(pref.toolbarFieldOnFocus + 5),
-			}),
-			toolbar_top_separator: nova({
-				0: () =>
-					pref.tabbarBorder === 0
-						? "transparent"
-						: css(pref.tabbarBorder + pref.tabbar + 5),
-				152: () => css(pref.toolbarBorder + pref.toolbar),
-				153: () =>
-					pref.toolbarBorder === 0
-						? "transparent"
-						: css(
-								pref.toolbarBorder +
-									pref.toolbar +
-									pref.tabbar +
-									5,
-							),
-			}),
+			toolbar: pref.nova
+				? pref.toolbar === 0
+					? "transparent"
+					: css(pref.toolbar + pref.tabbar + 5)
+				: css(pref.toolbar),
+			toolbar_bottom_separator: pref.nova
+				? css(pref.tabbarBorder + pref.tabbar)
+				: css(pref.toolbarBorder + pref.toolbar),
+			toolbar_field: pref.nova
+				? css(pref.toolbarField + 5)
+				: css(pref.toolbarField),
+			toolbar_field_border: pref.nova
+				? css(pref.toolbarFieldBorder + pref.toolbarField + 5)
+				: css(pref.toolbarFieldBorder + pref.toolbarField),
+			toolbar_field_focus: pref.nova
+				? css(pref.toolbarFieldOnFocus + 5)
+				: css(pref.toolbarFieldOnFocus),
+			toolbar_top_separator: pref.nova
+				? pref.toolbarBorder === 0
+					? "transparent"
+					: css(pref.toolbarBorder + pref.toolbar + pref.tabbar + 5)
+				: pref.tabbarBorder === 0
+					? "transparent"
+					: css(pref.tabbarBorder + pref.tabbar + 5),
 			// static
 			icons: primaryColour,
 			ntp_text: primaryColour,
@@ -545,15 +491,7 @@ async function applyTheme(
 			sidebar_highlight: accentColour,
 			icons_attention: accentColour,
 		},
-		properties: {
-			color_scheme: "system",
-			content_color_scheme: "system",
-			additional_backgrounds_tiling: nova({
-				0: () => undefined,
-				152: () => ["repeat"] as AdditionalBackgroundsTilingEnum[],
-				153: () => undefined,
-			}),
-		},
+		properties: { color_scheme: "system", content_color_scheme: "system" },
 	};
 	void updateBrowserTheme(windowId, theme);
 }
@@ -568,6 +506,5 @@ export default defineBackground(() => {
 		if (isBlank) blankTabIds.add(tabId);
 		else blankTabIds.delete(tabId);
 	});
-	getFirefoxVersion().then((version) => (firefoxVersion = version));
 	setInterval(() => void browser.runtime.getPlatformInfo(), 2e4);
 });

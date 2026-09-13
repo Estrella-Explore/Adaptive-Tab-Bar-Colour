@@ -138,7 +138,6 @@ export const defaultPreferenceContent = Object.freeze({
 /** Creates a `browserColour` object. */
 export function createBrowserColour(
 	getScheme: () => Scheme,
-	getFirefoxVersion: () => number,
 	pref: Preference,
 ): Record<BrowserColour, Colour> {
 	return Object.freeze({
@@ -160,9 +159,7 @@ export function createBrowserColour(
 		get DEFAULT() {
 			return getScheme() === "light"
 				? pref.nova
-					? getFirefoxVersion() >= 153
-						? new colour("#fcfbff")
-						: new colour("#f7f6fb")
+					? new colour("#fcfbff")
 					: new colour("#ffffff")
 				: pref.nova
 					? new colour("#121114")
@@ -205,9 +202,7 @@ export function createBrowserColour(
 				: new colour("#1c1b22");
 		},
 		get PRIVATE() {
-			return pref.nova
-				? new colour("#121114")
-				: new colour("#3c2e7c");
+			return pref.nova ? new colour("#121114") : new colour("#3c2e7c");
 		},
 		get PROCESS() {
 			return getScheme() === "light"

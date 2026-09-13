@@ -171,9 +171,6 @@ export interface ColourCorrectionResult {
 
 export type Theme = Manifest.ThemeType;
 
-export type AdditionalBackgroundsTilingEnum =
-	Manifest.ThemeTypePropertiesAdditionalBackgroundsTilingItemEnum;
-
 export type MessageForBackground =
 	| { header: "UPDATE_COLOUR"; colour: TabColourData }
 	| { header: "SCRIPT_READY" | "CACHE_REQUEST" };
