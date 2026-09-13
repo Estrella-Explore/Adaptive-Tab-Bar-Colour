@@ -205,7 +205,9 @@ export function createBrowserColour(
 				: new colour("#1c1b22");
 		},
 		get PRIVATE() {
-			return new colour("#25003e");
+			return pref.nova
+				? new colour("#121114")
+				: new colour("#3c2e7c");
 		},
 		get PROCESS() {
 			return getScheme() === "light"

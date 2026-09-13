@@ -315,7 +315,9 @@ function parseTabColourData(
 /** Gets the colour metadata for source pages. */
 function getSourcePageMeta(protocol: string, href: string): MetaQueryResult {
 	const reason = "PROTECTED_PAGE";
-	if (
+	if (href === "chrome://browser/content/blanktab.html") {
+		return { colour: browserColour.BLANK, reason };
+	} else if (
 		protocol === "view-source:" ||
 		plainTextExtension.some((extension) => href.endsWith(extension))
 	) {
@@ -340,11 +342,6 @@ async function getAboutPageMeta(
 			colour: (await isWindowIncognito(windowId))
 				? browserColour.PRIVATE
 				: browserColour.DEFAULT,
-			reason: "PROTECTED_PAGE",
-		};
-	} else if (href === "about:blank" && (await isWindowIncognito(windowId))) {
-		return {
-			colour: pref.nova ? browserColour.DEFAULT : browserColour.PRIVATE,
 			reason: "PROTECTED_PAGE",
 		};
 	} else if (href === "about:newtab" && blankTabIds.has(tabId)) {
