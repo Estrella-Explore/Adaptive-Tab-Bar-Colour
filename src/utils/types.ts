@@ -4,6 +4,7 @@ export type Scheme = "light" | "dark";
 
 export type BrowserColour =
 	| "ADDON"
+	| "BLANK"
 	| "COMPAT"
 	| "DEFAULT"
 	| "FALLBACK"
@@ -169,9 +170,6 @@ export interface ColourCorrectionResult {
 }
 
 export type Theme = Manifest.ThemeType;
-
-export type AdditionalBackgroundsTilingEnum =
-	Manifest.ThemeTypePropertiesAdditionalBackgroundsTilingItemEnum;
 
 export type MessageForBackground =
 	| { header: "UPDATE_COLOUR"; colour: TabColourData }

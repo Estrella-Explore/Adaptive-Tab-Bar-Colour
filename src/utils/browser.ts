@@ -101,6 +101,20 @@ export function addTabChangeListener(listener: () => void): void {
 	browser.windows?.onBoundsChanged?.addListener(listener);
 }
 
+/** Registers a listener for blank page tab events. */
+export function addBlankPageListener(
+	listener: (tabId: number, isBlank: boolean) => void,
+): void {
+	browser.tabs?.onCreated?.addListener((tab) => {
+		if (tab.id !== undefined && (!tab.url || tab.url === "about:blank")) {
+			listener(tab.id, true);
+		}
+	});
+	browser.tabs?.onRemoved?.addListener((tabId) => {
+		listener(tabId, false);
+	});
+}
+
 /** Checks whether the tab's window is incognito. */
 export async function isWindowIncognito(windowId: number): Promise<boolean> {
 	try {
@@ -212,19 +226,4 @@ export function removeMessageListener(
 /** Clamps a number between a minimum and maximum value. */
 export function clamp(min: number, num: number, max: number): number {
 	return Math.max(min, Math.min(max, num));
-}
-
-/** Retrieves the major Firefox version. */
-export async function getFirefoxVersion(): Promise<number> {
-	const minVersion = 115;
-	try {
-		if (typeof browser.runtime?.getBrowserInfo !== "function")
-			return minVersion;
-		const browserInfo = await browser.runtime.getBrowserInfo();
-		if (browserInfo.name !== "Firefox") return minVersion;
-		const version = parseInt(browserInfo.version, 10);
-		return isNaN(version) ? minVersion : version;
-	} catch {
-		return minVersion;
-	}
 }

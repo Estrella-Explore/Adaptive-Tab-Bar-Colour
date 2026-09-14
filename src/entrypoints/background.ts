@@ -18,21 +18,15 @@
  * Theme:
  * An object that defines the colour of the Firefox UI.
  */
-import Colour from "@/utils/colour";
-import Preference from "@/utils/preference";
-
-/** Version of Firefox. */
-let firefoxVersion = 115;
 
 /** Preference instance. */
 const pref = new Preference();
 
+/** Blank tab IDs. */
+const blankTabIds = new Set<number>();
+
 /** Page colour of Firefox internal page. */
-const browserColour = createBrowserColour(
-	() => cache.scheme,
-	() => firefoxVersion,
-	pref,
-);
+const browserColour = createBrowserColour(() => cache.scheme, pref);
 
 /** Runtime cache. */
 const cache: {
@@ -156,6 +150,10 @@ async function getTabMeta(
 	const { hostname, href, pathname, protocol } = new URL(url);
 	const { rule, webExtId } = ruleData;
 
+	if (href !== "about:blank" && href !== "about:newtab") {
+		blankTabIds.delete(id);
+	}
+
 	if (rule?.type === "COLOUR") {
 		sendMessageToTab(id, { header: "SETUP_SCRIPT", mode: "suspend" }).catch(
 			() => {},
@@ -190,7 +188,7 @@ async function getTabMeta(
 		console.info("Could not connect to", url);
 
 		if (protocol === "about:") {
-			return await getAboutPageMeta(windowId, href, pathname, title);
+			return await getAboutPageMeta(id, windowId, href, pathname, title);
 		} else if (protocol === "moz-extension:") {
 			return await getWebExtPageMeta(webExtId);
 		} else if (sourcePageProtocol.includes(protocol)) {
@@ -310,7 +308,9 @@ function parseTabColourData(
 /** Gets the colour metadata for source pages. */
 function getSourcePageMeta(protocol: string, href: string): MetaQueryResult {
 	const reason = "PROTECTED_PAGE";
-	if (
+	if (href === "chrome://browser/content/blanktab.html") {
+		return { colour: browserColour.BLANK, reason };
+	} else if (
 		protocol === "view-source:" ||
 		plainTextExtension.some((extension) => href.endsWith(extension))
 	) {
@@ -324,40 +324,32 @@ function getSourcePageMeta(protocol: string, href: string): MetaQueryResult {
 
 /** Gets colour metadata for an about page. */
 async function getAboutPageMeta(
+	tabId: number,
 	windowId: number,
 	href: string,
 	pathname: string,
 	title?: string,
 ): Promise<MetaQueryResult> {
-	if (
-		["about:firefoxview", "about:home", "about:newtab"].some((homeHref) =>
-			href.startsWith(homeHref),
-		)
-	) {
-		return { colour: browserColour.HOME, reason: "HOME_PAGE" };
-	} else if (href === "about:privatebrowsing") {
+	if (href === "about:privatebrowsing") {
 		return {
 			colour: (await isWindowIncognito(windowId))
 				? browserColour.PRIVATE
 				: browserColour.DEFAULT,
 			reason: "PROTECTED_PAGE",
 		};
-	} else if (
-		href === "about:blank" &&
-		title?.startsWith("about:") &&
-		title?.endsWith("profile")
-	) {
-		return {
-			colour: browserColour[
-				aboutPageColour[title?.slice(6)] ?? "DEFAULT"
-			],
-			reason: "PROTECTED_PAGE",
-		};
+	} else if (href === "about:newtab" && blankTabIds.has(tabId)) {
+		return { colour: browserColour.BLANK, reason: "PROTECTED_PAGE" };
 	} else {
-		return {
-			colour: browserColour[aboutPageColour[pathname] ?? "DEFAULT"],
-			reason: "PROTECTED_PAGE",
-		};
+		const identifier =
+			href === "about:blank" &&
+			title?.startsWith("about:") &&
+			title?.endsWith("profile")
+				? title.slice(6)
+				: pathname;
+		const data = aboutPageColour[identifier];
+		return data
+			? { colour: browserColour[data.colour], reason: data.reason }
+			: { colour: browserColour.DEFAULT, reason: "PROTECTED_PAGE" };
 	}
 }
 
@@ -432,38 +424,13 @@ async function setTabThemeColour(
  *
  * @see https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/theme
  */
-async function applyTheme(
-	windowId: number,
-	colour: Colour,
-	scheme: Scheme,
-): Promise<void> {
+function applyTheme(windowId: number, colour: Colour, scheme: Scheme): void {
 	if (scheme !== "light" && scheme !== "dark") return;
 
 	const lightDark = <T>(light: T, dark: T) =>
 		scheme === "light" ? light : dark;
 	const css = (value: number): string =>
 		colour.brightness(lightDark(-1.5, 1) * value).toRGBA();
-	const dataURL = async (colour: string): Promise<string> => {
-		const canvas = new OffscreenCanvas(16, 16);
-		const context = canvas.getContext("2d")!;
-		context.fillStyle = colour;
-		context.fillRect(0, 0, 16, 16);
-		const blob = await canvas.convertToBlob();
-		return new Promise((resolve) => {
-			const reader = new FileReader();
-			reader.onloadend = () => resolve(reader.result as string);
-			reader.readAsDataURL(blob);
-		});
-	};
-	const nova = <T>(mapping: Record<number, () => T>): T | undefined => {
-		if (!pref.nova) return mapping[0]?.();
-		let match = 0;
-		for (const key in mapping) {
-			const version = Number(key);
-			if (firefoxVersion >= version && version > match) match = version;
-		}
-		return mapping[match]?.();
-	};
 
 	const primaryColour = lightDark("#000000", "#ffffff");
 	const secondaryColour = lightDark("#0000001c", "#ffffff1c");
@@ -472,13 +439,6 @@ async function applyTheme(
 		: "AccentColor";
 
 	const theme: Theme = {
-		images: {
-			additional_backgrounds: await nova({
-				0: () => undefined,
-				152: async () => [await dataURL(css(pref.tabbar))],
-				153: () => undefined,
-			}),
-		},
 		colors: {
 			// adaptive
 			button_background_active: css(pref.tabSelected),
@@ -491,45 +451,30 @@ async function applyTheme(
 			sidebar_border: css(pref.sidebar + pref.sidebarBorder),
 			tab_line: css(pref.tabSelectedBorder + pref.tabSelected),
 			tab_selected: css(pref.tabSelected),
-			toolbar: nova({
-				0: () => css(pref.toolbar),
-				153: () =>
-					pref.toolbar === 0
-						? "transparent"
-						: css(pref.toolbar + pref.tabbar + 5),
-			}),
-			toolbar_bottom_separator: nova({
-				0: () => css(pref.toolbarBorder + pref.toolbar),
-				152: () => css(pref.tabbarBorder + pref.tabbar),
-			}),
-			toolbar_field: nova({
-				0: () => css(pref.toolbarField),
-				153: () => css(pref.toolbarField + 5),
-			}),
-			toolbar_field_border: nova({
-				0: () => css(pref.toolbarFieldBorder + pref.toolbarField),
-				153: () => css(pref.toolbarFieldBorder + pref.toolbarField + 5),
-			}),
-			toolbar_field_focus: nova({
-				0: () => css(pref.toolbarFieldOnFocus),
-				153: () => css(pref.toolbarFieldOnFocus + 5),
-			}),
-			toolbar_top_separator: nova({
-				0: () =>
-					pref.tabbarBorder === 0
-						? "transparent"
-						: css(pref.tabbarBorder + pref.tabbar + 5),
-				152: () => css(pref.toolbarBorder + pref.toolbar),
-				153: () =>
-					pref.toolbarBorder === 0
-						? "transparent"
-						: css(
-								pref.toolbarBorder +
-									pref.toolbar +
-									pref.tabbar +
-									5,
-							),
-			}),
+			toolbar: pref.nova
+				? pref.toolbar === 0
+					? "transparent"
+					: css(pref.toolbar + pref.tabbar + 5)
+				: css(pref.toolbar),
+			toolbar_bottom_separator: pref.nova
+				? css(pref.tabbarBorder + pref.tabbar)
+				: css(pref.toolbarBorder + pref.toolbar),
+			toolbar_field: pref.nova
+				? css(pref.toolbarField + 5)
+				: css(pref.toolbarField),
+			toolbar_field_border: pref.nova
+				? css(pref.toolbarFieldBorder + pref.toolbarField + 5)
+				: css(pref.toolbarFieldBorder + pref.toolbarField),
+			toolbar_field_focus: pref.nova
+				? css(pref.toolbarFieldOnFocus + 5)
+				: css(pref.toolbarFieldOnFocus),
+			toolbar_top_separator: pref.nova
+				? pref.toolbarBorder === 0
+					? "transparent"
+					: css(pref.toolbarBorder + pref.toolbar + pref.tabbar + 5)
+				: pref.tabbarBorder === 0
+					? "transparent"
+					: css(pref.tabbarBorder + pref.tabbar + 5),
 			// static
 			icons: primaryColour,
 			ntp_text: primaryColour,
@@ -546,15 +491,7 @@ async function applyTheme(
 			sidebar_highlight: accentColour,
 			icons_attention: accentColour,
 		},
-		properties: {
-			color_scheme: "system",
-			content_color_scheme: "system",
-			additional_backgrounds_tiling: nova({
-				0: () => undefined,
-				152: () => ["repeat"] as AdditionalBackgroundsTilingEnum[],
-				153: () => undefined,
-			}),
-		},
+		properties: { color_scheme: "system", content_color_scheme: "system" },
 	};
 	void updateBrowserTheme(windowId, theme);
 }
@@ -565,6 +502,9 @@ export default defineBackground(() => {
 	addSchemeChangeListener(run);
 	addTabChangeListener(run);
 	addMessageListener(handleMessage);
-	getFirefoxVersion().then((version) => (firefoxVersion = version));
+	addBlankPageListener((tabId, isBlank) => {
+		if (isBlank) blankTabIds.add(tabId);
+		else blankTabIds.delete(tabId);
+	});
 	setInterval(() => void browser.runtime.getPlatformInfo(), 2e4);
 });

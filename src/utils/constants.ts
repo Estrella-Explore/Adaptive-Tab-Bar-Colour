@@ -26,20 +26,21 @@ export const default_compatibilityMode = !supportsThemeAPI();
 // prettier-ignore
 /** Colours for about:pages. */
 export const aboutPageColour = Object.freeze({
-	"compat": "COMPAT",
-	"deleteprofile": "HOME",
-	"devtools-toolbox": "TOOLBOX",
-	"editprofile": "HOME",
-	"firefoxview": "HOME",
-	"home": "HOME",
-	"logo": "IMAGE_VIEWER",
-	"mozilla": "MOTTO",
-	"newprofile": "HOME",
-	"newtab": "HOME",
-	"privatebrowsing": "PRIVATE",
-	"processes": "PROCESS",
-	"sync-log": "LOG",
-} as Record<string, BrowserColour | undefined>);
+	"blank": { colour: "BLANK", reason: "PROTECTED_PAGE" },
+	"compat": { colour: "COMPAT", reason: "PROTECTED_PAGE" },
+	"deleteprofile": { colour: "HOME", reason: "HOME_PAGE" },
+	"devtools-toolbox": { colour: "TOOLBOX", reason: "PROTECTED_PAGE" },
+	"editprofile": { colour: "HOME", reason: "HOME_PAGE" },
+	"firefoxview": { colour: "HOME", reason: "HOME_PAGE" },
+	"home": { colour: "HOME", reason: "HOME_PAGE" },
+	"logo": { colour: "IMAGE_VIEWER", reason: "IMAGE_VIEWER" },
+	"mozilla": { colour: "MOTTO", reason: "PROTECTED_PAGE" },
+	"newprofile": { colour: "HOME", reason: "HOME_PAGE" },
+	"newtab": { colour: "HOME", reason: "HOME_PAGE" },
+	"privatebrowsing": { colour: "PRIVATE", reason: "PROTECTED_PAGE" },
+	"processes": { colour: "PROCESS", reason: "PROTECTED_PAGE" },
+	"sync-log": { colour: "LOG", reason: "PROTECTED_PAGE" },
+} as Record<string, { colour: BrowserColour, reason: TabMetaReason } | undefined>);
 
 // prettier-ignore
 /** Colours for restricted sites. */
@@ -137,7 +138,6 @@ export const defaultPreferenceContent = Object.freeze({
 /** Creates a `browserColour` object. */
 export function createBrowserColour(
 	getScheme: () => Scheme,
-	getFirefoxVersion: () => number,
 	pref: Preference,
 ): Record<BrowserColour, Colour> {
 	return Object.freeze({
@@ -145,6 +145,11 @@ export function createBrowserColour(
 			return getScheme() === "light"
 				? new colour("#ececec")
 				: new colour("#323232");
+		},
+		get BLANK() {
+			return getScheme() === "light"
+				? new colour("#ffffff")
+				: new colour("#1c1b22");
 		},
 		get COMPAT() {
 			return getScheme() === "light"
@@ -154,9 +159,7 @@ export function createBrowserColour(
 		get DEFAULT() {
 			return getScheme() === "light"
 				? pref.nova
-					? getFirefoxVersion() >= 153
-						? new colour("#fcfbff")
-						: new colour("#f7f6fb")
+					? new colour("#fcfbff")
 					: new colour("#ffffff")
 				: pref.nova
 					? new colour("#121114")
@@ -199,7 +202,7 @@ export function createBrowserColour(
 				: new colour("#1c1b22");
 		},
 		get PRIVATE() {
-			return new colour("#25003e");
+			return pref.nova ? new colour("#121114") : new colour("#3c2e7c");
 		},
 		get PROCESS() {
 			return getScheme() === "light"
