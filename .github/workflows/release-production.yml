@@ -1,5 +1,8 @@
 name: Release Production
 
+concurrency:
+  group: amo-api
+
 on:
   pull_request:
     types: [closed]
@@ -20,8 +23,12 @@ jobs:
        startsWith(github.event.pull_request.head.ref, 'release/')) ||
       (github.event_name == 'workflow_dispatch' &&
        github.ref == 'refs/heads/main')
+    environment:
+      name: AMO
+      url: https://addons.mozilla.org/firefox/addon/adaptive-tab-bar-colour/
     permissions:
       contents: write
+      deployments: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7

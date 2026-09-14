@@ -1,5 +1,8 @@
 name: Release Beta
 
+concurrency:
+  group: amo-api
+
 on:
   workflow_dispatch:
 
