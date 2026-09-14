@@ -1,5 +1,8 @@
 name: Sync AMO Descriptions
 
+concurrency:
+  group: amo-api
+
 on:
   push:
     branches: [main]

@@ -109,7 +109,7 @@ build_and_sign_production() {
 
 	local metadata_file
 	metadata_file=$(mktemp)
-	trap 'rm -f "$metadata_file"' EXIT
+	trap "rm -f '$metadata_file'" EXIT
 	jq -n \
 		--arg notes "$notes" \
 		'{"version": {"release_notes": {"en-GB": $notes}}}' \
