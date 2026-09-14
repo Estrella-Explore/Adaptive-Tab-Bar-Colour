@@ -6,6 +6,7 @@ export default defineConfig({
 		include: ["tests/specs/**/*.spec.ts"],
 		fileParallelism: false,
 		maxConcurrency: 1,
+		slowTestThreshold: 1000,
 		testTimeout: 60000,
 		hookTimeout: 60000,
 	},

@@ -102,38 +102,39 @@ create_beta_release() {
 	fi
 }
 
-# Extract package version and create AMO metadata file
-prepare_production_metadata() {
-	local notes="$1"
-	local base_version
-	base_version=$(get_package_version)
-	if [ -n "${GITHUB_OUTPUT:-}" ]; then
-		echo "version=${base_version}" >>"$GITHUB_OUTPUT"
-	fi
-	mkdir -p .output
+# Build production extension package and sign with web-ext
+build_and_sign_production() {
+	local notes="${1:-}"
+	bash scripts/zip.sh
+
+	local metadata_file
+	metadata_file=$(mktemp)
+	trap 'rm -f "$metadata_file"' EXIT
 	jq -n \
 		--arg notes "$notes" \
 		'{"version": {"release_notes": {"en-GB": $notes}}}' \
-		>.output/amo_metadata.json
-}
+		>"$metadata_file"
 
-# Build production extension package and sign with web-ext
-build_and_sign_production() {
-	bash scripts/zip.sh
 	npx web-ext sign \
 		--api-key "$FIREFOX_JWT_ISSUER" \
 		--api-secret "$FIREFOX_JWT_SECRET" \
 		--channel listed \
 		--source-dir .output/atbc \
 		--upload-source-code .output/atbc-sources.zip \
-		--amo-metadata .output/amo_metadata.json \
+		--amo-metadata "$metadata_file" \
 		--approval-timeout 0
 }
 
 # Tag repository and create GitHub production release
 create_production_release() {
-	local version="$1"
-	local notes="$2"
+	local version notes
+	if [ $# -ge 2 ]; then
+		version="$1"
+		notes="$2"
+	else
+		version=$(get_package_version)
+		notes="${1:-}"
+	fi
 	local tag="v${version}"
 	git_tag_and_push "$tag"
 	gh release create "$tag" \
